@@ -10,15 +10,66 @@
 
 #include "ssl.h"
 
+// static int zlib_decompress(SSL *s, CRYPTO_BUFFER **out, size_t uncompressed_len,
+//                                              const uint8_t *in, size_t in_len)
+// {
+//     size_t outlen = uncompressed_len;
+//     uint8_t * outbuf =malloc(outlen);
+
+//     // printf("%d %d\n",uncompressed_len,in_len);
+//     if (uncompress(outbuf, &outlen, in, in_len) != Z_OK)
+//         return 0;
+
+//     if (outlen != uncompressed_len)
+//         return 0;
+//     else{
+//         *out=CRYPTO_BUFFER_new(outbuf,outlen,NULL);
+//         free(outbuf);
+//     }
+
+//     return 1;
+// }
+
 static int zlib_decompress(SSL *s, CRYPTO_BUFFER **out, size_t uncompressed_len,
                                              const uint8_t *in, size_t in_len)
 {
     size_t outlen = uncompressed_len;
     uint8_t * outbuf =malloc(outlen);
 
-    // printf("%d %d\n",uncompressed_len,in_len);
-    if (uncompress(outbuf, &outlen, in, in_len) != Z_OK)
-        return 0;
+    z_stream d_stream; /* decompression stream */
+    d_stream.zalloc = NULL;
+    d_stream.zfree = NULL;
+    d_stream.opaque = NULL;
+    d_stream.next_in = in;
+    d_stream.avail_in = in_len;
+    d_stream.next_out = outbuf;
+    d_stream.avail_out=outlen;
+
+
+	int err = -1;
+	err = inflateInit2(&d_stream, MAX_WBITS + 16);
+
+	if (err == Z_OK)
+	{
+		err = inflate(&d_stream, Z_FINISH);
+		if (err != Z_STREAM_END)
+		{
+			(void)inflateEnd(&d_stream);
+			printf("decompression failed, inflate return: \n");
+
+			return 0;
+		}
+	}
+	else
+	{
+		inflateEnd(&d_stream);
+		printf("decompression initialization failed, quit!\n");
+		return 0;
+    }
+
+    (void)inflateEnd(&d_stream);
+	// printf("decompress succed, before decompress size is %d, after decompress size is %d\n", d_stream.total_in, d_stream.avail_out);
+    outlen=d_stream.total_out;
 
     if (outlen != uncompressed_len)
         return 0;
