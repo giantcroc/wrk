@@ -7,6 +7,7 @@
 #include <openssl/ssl.h>
 #include <openssl/pool.h>
 #include <zlib.h>
+#include <zstd.h>
 
 #include "ssl.h"
 
@@ -29,7 +30,37 @@
 
 //     return 1;
 // }
+static int zstd_decompress(SSL *s, CRYPTO_BUFFER **out, size_t uncompressed_len,
+                                             const uint8_t *in, size_t in_len)
+{
+    size_t outlen = uncompressed_len;
+    uint8_t * outbuf =malloc(outlen);
 
+    // unsigned long long const rSize = ZSTD_getFrameContentSize(in, in_len);
+    // if(rSize == ZSTD_CONTENTSIZE_ERROR){
+    //     printf("not compressed by zstd! \n");
+    //     return 0;
+    // }
+    // if(rSize == ZSTD_CONTENTSIZE_UNKNOWN){
+    //     printf("original size unknown! \n");
+    //     return 0;
+    // }
+
+    outlen = ZSTD_decompress(outbuf, outlen, in, in_len);
+    if(ZSTD_isError(outlen)){
+        printf("decompress error! \n");
+        return 0;
+    }
+
+    if (outlen != uncompressed_len)
+        return 0;
+    else{
+        *out=CRYPTO_BUFFER_new(outbuf,outlen,NULL);
+        free(outbuf);
+    }
+
+    return 1;
+}
 static int zlib_decompress(SSL *s, CRYPTO_BUFFER **out, size_t uncompressed_len,
                                              const uint8_t *in, size_t in_len)
 {
@@ -95,7 +126,7 @@ SSL_CTX *ssl_init() {
         SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_CLIENT);
 
         SSL_CTX_add_cert_compression_alg(ctx, 1,
-                                        NULL, zlib_decompress);
+                                        NULL, zstd_decompress);
     }
 
     return ctx;
